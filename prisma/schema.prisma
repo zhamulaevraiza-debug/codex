@@ -1,0 +1,300 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum AiProvider {
+  OPENAI
+  ANTHROPIC
+  DEEPSEEK
+  DEEPGRAM
+  ELEVENLABS
+  CLOUDCODE
+  OPENAI_COMPAT
+}
+
+enum AiRole {
+  PRIMARY_LLM
+  TEST_LLM
+  LIVE_LLM
+  TTS
+  STT
+}
+
+enum ThemeMode {
+  DAY
+  NIGHT
+  AUTO
+}
+
+enum ColorScheme {
+  DEFAULT
+  SCHEME_2
+  SCHEME_3
+}
+
+enum FontFamily {
+  FONT_1
+  FONT_2
+  FONT_3
+}
+
+enum QuizType {
+  QUIZ
+  SELF_CHECK
+  VOICE
+}
+
+enum UsagePeriod {
+  MINUTE
+  DAY
+}
+
+enum LimitType {
+  RPM
+  TPD
+  TTS_CHARS_DAILY
+  STT_SECONDS_DAILY
+}
+
+enum AiRequestType {
+  LLM
+  TTS
+  STT
+}
+
+model User {
+  id           String              @id @default(uuid())
+  email        String              @unique
+  passwordHash String
+  role         Role                @default(USER)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  profile      UserProfile?
+  settings     UserSettings?
+  refreshTokens RefreshToken[]
+  apiKeys      ApiKey[]
+  aiConfigs    AiProviderConfig[]
+  aiUsage      AiUsage[]
+  aiLimitOverrides AiLimitOverride[]
+  aiLimitEvents    AiLimitEvent[]
+  aiRequestLogs    AiRequestLog[]
+}
+
+model UserProfile {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  name       String?
+  age        Int?
+  profession String?
+  level      String?
+  locale     String?  @default("ru")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSettings {
+  id          String     @id @default(uuid())
+  userId      String     @unique
+  fontSize    Int        @default(16)
+  fontFamily  FontFamily @default(FONT_1)
+  theme       ThemeMode  @default(AUTO)
+  colorScheme ColorScheme @default(DEFAULT)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id           String     @id @default(uuid())
+  userId       String
+  provider     AiProvider
+  encryptedKey String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}
+
+model AiProviderConfig {
+  id        String     @id @default(uuid())
+  userId    String
+  role      AiRole
+  provider  AiProvider
+  model     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+}
+
+model TeachingStyle {
+  id        String   @id @default(uuid())
+  name      String
+  content   String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Section {
+  id        String   @id @default(uuid())
+  title     String
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lessons Lesson[]
+}
+
+model Lesson {
+  id        String   @id @default(uuid())
+  sectionId String
+  title     String
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  cards   Card[]
+  quizzes Quiz[]
+}
+
+model Card {
+  id               String   @id @default(uuid())
+  lessonId         String
+  order            Int
+  arabicText       String?
+  translationRu    String?
+  translationOther String?
+  audioUrl         String?
+  shortExplanation String?
+  fullExplanation  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+}
+
+model Quiz {
+  id          String   @id @default(uuid())
+  lessonId    String
+  type        QuizType
+  question    String
+  explanation String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lesson  Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  options QuizOption[]
+}
+
+model QuizOption {
+  id       String @id @default(uuid())
+  quizId   String
+  text     String
+  isCorrect Boolean @default(false)
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+model AiUsage {
+  id        String      @id @default(uuid())
+  userId    String
+  role      AiRole
+  period    UsagePeriod
+  periodKey String
+  requests  Int         @default(0)
+  tokens    Int         @default(0)
+  ttsChars  Int         @default(0)
+  sttSeconds Int        @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role, period, periodKey])
+  @@index([userId, role, period, periodKey])
+}
+
+model AiLimitOverride {
+  id        String     @id @default(uuid())
+  userId    String?
+  role      AiRole?
+  type      LimitType
+  limit     Int
+  isSoft    Boolean    @default(false)
+  note      String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, role, type])
+}
+
+model AiLimitEvent {
+  id        String     @id @default(uuid())
+  userId    String
+  role      AiRole
+  type      LimitType
+  isSoft    Boolean
+  message   String
+  metadata  String?
+  createdAt DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, role, type, createdAt])
+}
+
+model AiRequestLog {
+  id            String        @id @default(uuid())
+  userId        String
+  role          AiRole
+  provider      AiProvider
+  type          AiRequestType
+  model         String?
+  requestChars  Int           @default(0)
+  responseChars Int           @default(0)
+  tokens        Int           @default(0)
+  durationSeconds Int         @default(0)
+  isStream      Boolean       @default(false)
+  success       Boolean       @default(true)
+  errorMessage  String?
+  createdAt     DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, role, provider, type, createdAt])
+}
