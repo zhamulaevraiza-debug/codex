@@ -88,13 +88,27 @@ Swagger UI: `GET /docs`.
 
 ## Запуск
 
+### Бэкенд (NestJS)
+
 ```bash
 cp .env.example .env
 npm install
 npx prisma migrate dev
 npx ts-node prisma/seed.ts   # создаёт демо-пользователей
-npm run start:dev
+npm run start:dev            # http://localhost:3000 + Swagger на /docs
 ```
+
+### Фронтенд (React + Vite)
+
+```bash
+cd web
+npm install
+npm run dev                  # http://localhost:5173, проксирует /api → :3000
+```
+
+В `web/` лежит SPA c ролевыми дашбордами: вход, страницы оператора,
+водителя, цеха и админ-секция (заявки, касса, отчёты, сотрудники).
+Для production сборки — `npm run build` в `web/`, статика в `web/dist`.
 
 После сидинга доступны логины:
 
