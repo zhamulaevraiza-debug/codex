@@ -3,9 +3,10 @@ import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 
 @Injectable()
 export class CryptoService {
-  private readonly key: Buffer;
+  private cachedKey: Buffer | null = null;
 
-  constructor() {
+  private getKey(): Buffer {
+    if (this.cachedKey) return this.cachedKey;
     const raw = process.env.CRYPTO_KEY;
     if (!raw) {
       throw new Error("CRYPTO_KEY is not set");
@@ -14,12 +15,13 @@ export class CryptoService {
     if (key.length !== 32) {
       throw new Error("CRYPTO_KEY must be 32 bytes (base64-encoded)");
     }
-    this.key = key;
+    this.cachedKey = key;
+    return key;
   }
 
   encrypt(plain: string): string {
     const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", this.key, iv);
+    const cipher = createCipheriv("aes-256-gcm", this.getKey(), iv);
     const encrypted = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
     const tag = cipher.getAuthTag();
     return [
@@ -37,7 +39,7 @@ export class CryptoService {
     const iv = Buffer.from(ivB64, "base64");
     const tag = Buffer.from(tagB64, "base64");
     const data = Buffer.from(dataB64, "base64");
-    const decipher = createDecipheriv("aes-256-gcm", this.key, iv);
+    const decipher = createDecipheriv("aes-256-gcm", this.getKey(), iv);
     decipher.setAuthTag(tag);
     const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
     return decrypted.toString("utf8");

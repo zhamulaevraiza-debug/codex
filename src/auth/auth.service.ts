@@ -126,18 +126,20 @@ export class AuthService {
   }
 
   private async issueTokens(userId: string, email: string, role: Role): Promise<Tokens> {
+    const accessExpires = (process.env.JWT_ACCESS_EXPIRES ?? "15m") as unknown as number;
+    const refreshExpires = (process.env.JWT_REFRESH_EXPIRES ?? "7d") as unknown as number;
     const accessToken = await this.jwt.signAsync(
       { sub: userId, email, role },
       {
         secret: process.env.JWT_ACCESS_SECRET,
-        expiresIn: process.env.JWT_ACCESS_EXPIRES ?? "15m",
+        expiresIn: accessExpires,
       },
     );
     const refreshToken = await this.jwt.signAsync(
       { sub: userId, email, role },
       {
         secret: process.env.JWT_REFRESH_SECRET,
-        expiresIn: process.env.JWT_REFRESH_EXPIRES ?? "7d",
+        expiresIn: refreshExpires,
       },
     );
     return { accessToken, refreshToken };
