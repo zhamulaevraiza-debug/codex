@@ -1,98 +1,161 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Carpet Cleaning CRM — MVP backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Узкая CRM для цеха мойки ковров. Цель MVP — провести заявку по цепочке:
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+> Оператор → Водитель → Цех → Касса → Отчёт руководителя
 
-## Description
+Реализовано на NestJS + Prisma 7 (SQLite через driver adapter). REST API,
+JWT-аутентификация, ролевая модель.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Роли
 
-## Project setup
+| Роль       | Что видит / делает                                                       |
+| ---------- | ------------------------------------------------------------------------ |
+| `ADMIN`    | Всё: сотрудники, заявки, касса, отчёты                                   |
+| `OPERATOR` | Создаёт заявки и видит весь их жизненный цикл, может отменять            |
+| `DRIVER`   | Видит заявки `NEW_PICKUP`/`PICKED_UP`, заполняет данные, передаёт в цех  |
+| `WORKSHOP` | Видит заявки `IN_WORKSHOP`/`MEASURED`, добавляет ковры, передаёт в кассу |
 
-```bash
-$ npm install
+## Жизненный цикл заявки
+
+```
+NEW_PICKUP → PICKED_UP → IN_WORKSHOP → MEASURED → AWAITING_PAYMENT → PAID
+                                              ↘ (любой шаг) → CANCELLED
 ```
 
-## Compile and run the project
+| Статус             | Триггер                                                  |
+| ------------------ | -------------------------------------------------------- |
+| `NEW_PICKUP`       | Оператор создал заявку на забор                          |
+| `PICKED_UP`        | Водитель забрал ковры (`PATCH /orders/:id/driver-pickup`) |
+| `IN_WORKSHOP`      | Водитель привёз в цех (`PATCH /orders/:id/transfer-to-workshop`) |
+| `MEASURED`         | Цех добавил хотя бы одно изделие                         |
+| `AWAITING_PAYMENT` | Цех передал в кассу (`PATCH /orders/:id/transfer-to-cash`) |
+| `PAID`             | Касса зафиксировала оплату (`PATCH /orders/:id/pay`)     |
+| `CANCELLED`        | Заявка отменена (`PATCH /orders/:id/cancel`)             |
 
-```bash
-# development
-$ npm run start
+## Расчёт стоимости
 
-# watch mode
-$ npm run start:dev
+Для каждого ковра в цехе:
 
-# production mode
-$ npm run start:prod
+```
+area    = length × width
+amount  = area × pricePerSqm
 ```
 
-## Run tests
+Итог заявки — сумма `amount` по всем изделиям.
+
+## API
+
+Swagger UI: `GET /docs`.
+
+### Аутентификация (`/auth`)
+
+- `POST /auth/login` — `{ email, password }` → `{ userId, tokens }`
+- `POST /auth/refresh`, `POST /auth/logout`
+
+### Сотрудники (`/staff`, ADMIN)
+
+- `GET /staff?role=DRIVER` — список
+- `POST /staff` — создать (`{ email, password, role, name? }`)
+- `PATCH /staff/:id` — сменить роль/имя/пароль
+
+### Заявки (`/orders`)
+
+- `GET /orders` — список (фильтруется по роли + `?status=`/`?search=`)
+- `GET /orders/:id`
+- `POST /orders` — OPERATOR/ADMIN
+- `PATCH /orders/:id/driver-pickup` — DRIVER/ADMIN
+- `PATCH /orders/:id/transfer-to-workshop` — DRIVER/ADMIN
+- `PATCH /orders/:id/workshop` — WORKSHOP/ADMIN (цена, заметка)
+- `POST /orders/:id/items` — WORKSHOP/ADMIN (ковёр или текстиль)
+- `PATCH /orders/:id/items/:itemId`, `DELETE /orders/:id/items/:itemId`
+- `PATCH /orders/:id/transfer-to-cash` — WORKSHOP/ADMIN
+- `PATCH /orders/:id/pay` — ADMIN (касса)
+- `PATCH /orders/:id/cancel` — OPERATOR/ADMIN
+
+### Касса (`/cash`, ADMIN)
+
+- `GET /cash/transactions` — фильтры по типу/категории/дате
+- `POST /cash/income` — приход (можно `orderId`)
+- `POST /cash/expense` — расход (`{ amount, category, note? }`),
+  категории: `CHEMISTRY`, `PERFUME`, `FUEL`, `SALARY`, `RENT`, `OTHER`
+- `GET /cash/balance?from=&to=` — приход/расход/остаток/расход по категориям
+
+### Отчёты руководителю (`/reports`, ADMIN)
+
+- `GET /reports/overview?from=&to=` — заявки по статусам + кассовая сводка
+- `GET /reports/daily?from=&to=` — разбивка по дням
+
+## Запуск
+
+### Бэкенд (NestJS)
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+cp .env.example .env
+npm install
+npx prisma migrate dev
+npx ts-node prisma/seed.ts   # создаёт демо-пользователей
+npm run start:dev            # http://localhost:3000 + Swagger на /docs
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Фронтенд (React + Vite)
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+cd web
+npm install
+npm run dev                  # http://localhost:5173, проксирует /api → :3000
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+В `web/` лежит SPA c ролевыми дашбордами: вход, страницы оператора,
+водителя, цеха и админ-секция (заявки, касса, отчёты, сотрудники).
+Для production сборки — `npm run build` в `web/`, статика в `web/dist`.
 
-## Resources
+После сидинга доступны логины:
 
-Check out a few resources that may come in handy when working with NestJS:
+| Роль       | Логин                   | Пароль          |
+| ---------- | ----------------------- | --------------- |
+| ADMIN      | `admin@example.com`     | `change-me-strong` |
+| OPERATOR   | `operator@example.com`  | `operator123`   |
+| DRIVER     | `driver@example.com`    | `driver123`     |
+| WORKSHOP   | `workshop@example.com`  | `workshop123`   |
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Пароли — для локальной разработки. В продакшене перезапишите переменные
+`*_EMAIL/*_PASSWORD` или сразу заведите сотрудников через `POST /staff`.
 
-## Support
+## Сценарий цепочки (smoke)
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+# логин оператора
+OP=$(curl -s -X POST localhost:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"operator@example.com","password":"operator123"}' \
+  | jq -r .tokens.accessToken)
 
-## Stay in touch
+# 1. оператор создаёт заявку
+curl -s -X POST localhost:3000/orders -H "Authorization: Bearer $OP" \
+  -H 'Content-Type: application/json' \
+  -d '{"customerName":"Иван","customerPhone":"+7 700 0",
+       "address":"ул. Абая 1","entrance":"2","floor":"5"}'
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+# 2. водитель → /orders/:id/driver-pickup + /transfer-to-workshop
+# 3. цех → /orders/:id/items (несколько раз) + /transfer-to-cash
+# 4. касса → /orders/:id/pay
+# 5. руководитель → /reports/overview
+```
 
-## License
+## Что НЕ в MVP
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+WhatsApp, push/SMS, печать квитанций, маршруты, склад, зарплаты,
+мобильное приложение, продвинутая аналитика. См. ТЗ — пункт 6.
+
+## Структура
+
+```
+src/
+  auth/        JWT + ролевой guard
+  staff/       управление сотрудниками (ADMIN)
+  orders/      заявки и переходы по цепочке
+  cash/        приход / расход / баланс
+  reports/     сводки для руководителя
+  common/      Prisma (через better-sqlite3 adapter), throttler
+```

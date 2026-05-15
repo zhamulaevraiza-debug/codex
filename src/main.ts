@@ -5,6 +5,10 @@ import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN?.split(",") ?? true,
+    credentials: true,
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -13,8 +17,10 @@ async function bootstrap() {
     }),
   );
   const config = new DocumentBuilder()
-    .setTitle("Tajweed Suvaid MVP API")
-    .setDescription("API documentation")
+    .setTitle("Carpet Cleaning CRM API")
+    .setDescription(
+      "REST API: оператор → водитель → цех → касса → отчёты руководителя.",
+    )
     .setVersion("0.1.0")
     .addBearerAuth()
     .build();

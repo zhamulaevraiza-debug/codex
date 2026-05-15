@@ -7,11 +7,10 @@ import { APP_GUARD } from "@nestjs/core";
 import { CommonModule } from "./common/common.module";
 import { throttlerConfig } from "./common/throttle";
 import { AuthModule } from "./auth/auth.module";
-import { EducationModule } from "./education/education.module";
-import { AdminModule } from "./admin/admin.module";
-import { UsersModule } from "./users/users.module";
-import { TeachingStyleModule } from "./teaching-style/teaching-style.module";
-import { AiModule } from "./ai/ai.module";
+import { StaffModule } from "./staff/staff.module";
+import { OrdersModule } from "./orders/orders.module";
+import { CashModule } from "./cash/cash.module";
+import { ReportsModule } from "./reports/reports.module";
 
 @Module({
   imports: [
@@ -19,11 +18,10 @@ import { AiModule } from "./ai/ai.module";
     ThrottlerModule.forRoot(throttlerConfig),
     CommonModule,
     AuthModule,
-    EducationModule,
-    AdminModule,
-    UsersModule,
-    TeachingStyleModule,
-    AiModule,
+    StaffModule,
+    OrdersModule,
+    CashModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -2,7 +2,8 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -12,6 +13,33 @@ datasource db {
 enum Role {
   USER
   ADMIN
+  OPERATOR
+  DRIVER
+  WORKSHOP
+}
+
+enum OrderStatus {
+  NEW_PICKUP
+  PICKED_UP
+  IN_WORKSHOP
+  MEASURED
+  AWAITING_PAYMENT
+  PAID
+  CANCELLED
+}
+
+enum ExpenseCategory {
+  CHEMISTRY
+  PERFUME
+  FUEL
+  SALARY
+  RENT
+  OTHER
+}
+
+enum CashTransactionType {
+  INCOME
+  EXPENSE
 }
 
 enum AiProvider {
@@ -91,6 +119,13 @@ model User {
   aiLimitOverrides AiLimitOverride[]
   aiLimitEvents    AiLimitEvent[]
   aiRequestLogs    AiRequestLog[]
+
+  ordersCreated     Order[]           @relation("OrderCreatedBy")
+  ordersDriver      Order[]           @relation("OrderDriver")
+  ordersWorkshop    Order[]           @relation("OrderWorkshop")
+  ordersCashier     Order[]           @relation("OrderCashier")
+  cashTransactions  CashTransaction[]
+  orderEvents       OrderEvent[]
 }
 
 model UserProfile {
@@ -297,4 +332,109 @@ model AiRequestLog {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, role, provider, type, createdAt])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  number          Int         @unique
+  status          OrderStatus @default(NEW_PICKUP)
+
+  customerName    String
+  customerPhone   String
+  city            String?
+  address         String
+  apartment       String?
+  entrance        String?
+  floor           String?
+  operatorNote    String?
+  pickupAt        DateTime?
+
+  carpetsCount    Int?
+  textilesCount   Int?
+  driverNote      String?
+  driverPhotos    String?
+
+  workshopNote    String?
+  pricePerSqm     Float?
+  totalAmount     Float       @default(0)
+  paidAmount      Float       @default(0)
+
+  createdById     String
+  driverId        String?
+  workshopId      String?
+  cashierId       String?
+
+  pickedUpAt      DateTime?
+  arrivedAt       DateTime?
+  measuredAt      DateTime?
+  readyForCashAt  DateTime?
+  paidAt          DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  createdBy       User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  driver          User?       @relation("OrderDriver", fields: [driverId], references: [id])
+  workshop        User?       @relation("OrderWorkshop", fields: [workshopId], references: [id])
+  cashier         User?       @relation("OrderCashier", fields: [cashierId], references: [id])
+
+  items           OrderItem[]
+  events          OrderEvent[]
+  transactions    CashTransaction[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id            String   @id @default(uuid())
+  orderId       String
+  label         String?
+  length        Float
+  width         Float
+  area          Float
+  pricePerSqm   Float
+  amount        Float
+  defects       String?
+  note          String?
+  photos        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model OrderEvent {
+  id        String       @id @default(uuid())
+  orderId   String
+  status    OrderStatus
+  message   String?
+  actorId   String?
+  createdAt DateTime     @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([orderId, createdAt])
+}
+
+model CashTransaction {
+  id        String              @id @default(uuid())
+  type      CashTransactionType
+  amount    Float
+  category  ExpenseCategory?
+  orderId   String?
+  note      String?
+  createdById String
+  createdAt DateTime            @default(now())
+
+  order     Order?  @relation(fields: [orderId], references: [id])
+  createdBy User    @relation(fields: [createdById], references: [id])
+
+  @@index([type, createdAt])
+  @@index([orderId])
 }
